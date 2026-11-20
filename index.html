@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pz3d 세션 기록</title>
+<style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#ECEEE8;color:#1D2219;font:15px/1.6 "Malgun Gothic",system-ui,sans-serif;text-align:center;padding:20px}
+@media (prefers-color-scheme: dark){body{background:#111417;color:#E5E8E0}}
+.spin{width:22px;height:22px;border-radius:50%;border:3px solid #D7DBCF;border-top-color:#4C5F22;animation:s .8s linear infinite;margin:0 auto 12px}
+@keyframes s{to{transform:rotate(360deg)}}
+small{color:#8E9585}
+</style>
+</head>
+<body>
+<div id="box"><div class="spin"></div>세션 기록 사이트로 이동하는 중…</div>
+<script>
+// Fixed GitHub Pages address -> current Cloudflare quick-tunnel URL (url.json is rewritten by recorder/app.js on each tunnel start).
+fetch('url.json?t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()).then(d => {
+  if (d.url) { location.replace(d.url); return; }
+  const when = d.updated ? new Date(d.updated).toLocaleString('ko-KR') : '';
+  document.getElementById('box').innerHTML = '<b>지금은 세션 기록 사이트가 꺼져 있습니다.</b><br>방장 PC에서 사이트가 켜지면 이 주소로 다시 들어와 주세요.' + (when ? '<br><small>마지막 변경: ' + when + '</small>' : '');
+}).catch(() => { document.getElementById('box').textContent = '주소를 읽지 못했습니다. 잠시 뒤 새로고침해 주세요.'; });
+</script>
+</body>
+</html>
