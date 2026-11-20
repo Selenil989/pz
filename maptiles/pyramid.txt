@@ -1,0 +1,3 @@
+VERSION=1
+bounds=0 0 19968 16128
+imageSize=19968 16128

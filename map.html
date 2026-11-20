@@ -1,0 +1,1128 @@
+<!DOCTYPE html>
+<html lang="ko" data-public="">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>세션 동선 지도</title>
+<link rel="stylesheet" href="style.css">
+<script src="config.js"></script>
+<style>
+/* Map-first workbench (same layout and behaviour as the reference page): map + timeline left, people / chronological panel right. */
+:root{--casing:#FFFFFF;--wash:rgba(236,238,232,.18);--danger:var(--rec)}
+@media (prefers-color-scheme: dark){:root{--casing:#0D0F11;--wash:rgba(14,17,20,.40)}}
+html,body{height:100%;margin:0}
+body{overflow:hidden}
+[hidden]{display:none!important}
+.app{height:100%;display:grid;grid-template-columns:minmax(0,1fr) 360px;grid-template-rows:auto minmax(0,1fr) auto;gap:12px;padding:14px 16px;box-sizing:border-box}
+.top{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px}
+.eyebrow{margin:0;font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.top h1{margin:2px 0 0;font-size:24px;font-weight:700;letter-spacing:-.02em}
+.top .sub{margin:2px 0 0;color:var(--muted);font-size:13px}
+.embedded .top>div:first-child{display:none}.embedded .top{justify-content:flex-end}.embedded .app{padding-top:10px}
+.mtabs{display:inline-flex;padding:3px;border-radius:999px;background:var(--surface);border:1px solid var(--line)}
+.mtabs button{border:0;background:none;padding:7px 16px;border-radius:999px;font-weight:600;color:var(--muted);cursor:pointer}
+.mtabs button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+
+.map{grid-column:1;grid-row:2;position:relative;border-radius:var(--r);overflow:hidden;border:1px solid var(--line);background:var(--surface);min-height:300px;touch-action:none}
+.map>canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab}
+.map>canvas.dragging{cursor:grabbing}.map>canvas.pointing{cursor:pointer}
+.layers{position:absolute;top:10px;left:10px;right:64px;display:flex;flex-wrap:wrap;gap:6px;pointer-events:none}
+.chip{pointer-events:auto;display:inline-flex;align-items:center;gap:6px;padding:5px 10px 5px 8px;border-radius:999px;border:1px solid var(--line);background:var(--raised);color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.chip svg{width:14px;height:14px;flex:none}
+.chip[aria-pressed="true"]{color:var(--ink);border-color:var(--ink)}
+.chip[aria-pressed="false"] svg{opacity:.4}
+.chip .n{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.zoom{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--raised);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.zoom button{width:36px;height:34px;border:0;background:none;cursor:pointer;font-size:18px;line-height:1;color:var(--ink)}
+.zoom button+button{border-top:1px solid var(--line)}
+.zoom button:hover{background:var(--band)}
+.legend{position:absolute;left:10px;bottom:10px;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center;padding:6px 10px;border-radius:8px;background:var(--raised);border:1px solid var(--line);font-size:12px;color:var(--muted);max-width:calc(100% - 200px)}
+.legend i{display:inline-block;vertical-align:middle;width:22px;height:0;border-top:3px solid var(--ink);margin-right:6px}
+.legend i.dash{border-top-style:dashed}
+.legend .bub{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;border:3px solid var(--accent);font:600 10px var(--f-mono);color:var(--ink);margin-right:6px;vertical-align:middle}
+.coords{position:absolute;right:10px;bottom:10px;font-family:var(--f-mono);font-size:11px;color:var(--muted);background:var(--raised);border:1px solid var(--line);border-radius:6px;padding:3px 7px;text-align:right}
+.coords .place{display:block;font-family:var(--f-body);color:var(--ink)}
+
+.tip{position:absolute;pointer-events:none;z-index:40;max-width:280px;padding:7px 10px;border-radius:8px;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.45;box-shadow:0 4px 16px rgba(0,0,0,.2)}
+.tip b{font-weight:600}
+.pop{position:absolute;z-index:5;width:300px;max-width:calc(100% - 20px);max-height:min(380px,calc(100% - 20px));display:flex;flex-direction:column;border-radius:var(--r);background:var(--raised);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.22)}
+.pop header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);cursor:move;user-select:none;touch-action:none}
+.pop header button{cursor:pointer}
+.pop.moving{box-shadow:0 16px 40px rgba(0,0,0,.3)}
+.pop header strong{font-size:13px}
+.pop .x{border:0;background:none;cursor:pointer;font-size:18px;color:var(--muted);padding:0 4px}
+.pop ul{list-style:none;margin:0;padding:4px;overflow:auto}
+.pop .sum{margin:6px 12px 0;font-size:12px;color:var(--muted)}
+.pop.state{width:320px}
+.st{padding:10px 14px 12px;overflow:auto;display:grid;gap:10px;font-size:13px}
+.st h4{margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--muted)}
+.st .row{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline}
+.st .big{font-family:var(--f-mono);font-weight:600;font-size:16px}
+.st .chips{display:flex;flex-wrap:wrap;gap:4px}
+.st .chips span{font-size:12px;padding:1px 8px;border-radius:6px;background:var(--band)}
+.st .pill{font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.st .pill.on{color:var(--live);border-color:currentColor}
+.st .pill.dead{color:var(--danger);border-color:currentColor}
+.st ul{margin:0;padding-left:16px}
+.st .note{font-size:12px;color:var(--muted)}
+.detail .st{padding:0}
+.pop .act{display:flex;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid var(--line)}
+.mbtn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;flex:none}
+.mbtn:hover{border-color:var(--ink)}
+.mbtn[disabled]{opacity:.45;cursor:default;border-color:var(--line)}
+.mbtn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+
+/* event rows (popover, feed, person detail) */
+.ev button{width:100%;display:grid;grid-template-columns:42px 16px minmax(0,1fr);align-items:center;gap:8px;padding:6px 8px;border:0;background:none;border-radius:6px;text-align:left;cursor:pointer;color:var(--ink)}
+.ev button:hover{background:var(--band)}
+.ev time{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;line-height:1.3}
+.ev svg{width:14px;height:14px;display:block}
+.ev .what{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev button:hover .what,.ev button:focus-visible .what{white-space:normal;overflow:visible;word-break:keep-all}
+.ev .who{font-weight:600;margin-right:6px}
+.ev.future{opacity:.35}
+.ev.now button{background:var(--band);box-shadow:inset 3px 0 0 var(--accent)}
+
+.timeline{grid-column:1;grid-row:3;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);padding:10px 12px 8px;min-width:0}
+.tl-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;margin-bottom:6px}
+.play{width:38px;height:38px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);cursor:pointer;display:grid;place-items:center;flex:none}
+.play svg{width:16px;height:16px;pointer-events:none}
+.clock{display:flex;flex-direction:column;line-height:1.2;min-width:0}
+.clock .g{font-family:var(--f-mono);font-size:18px;font-weight:600}
+.clock .r{font-size:12px;color:var(--muted)}
+.tl-note{font-size:12px;color:var(--muted)}
+.live-btn{border:1px solid var(--line);background:var(--raised);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer}
+.live-btn.on{color:var(--rec);border-color:var(--rec)}
+.speed{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-left:auto}
+.speed button{border:0;background:none;padding:5px 10px;font-size:12px;cursor:pointer;color:var(--muted);font-family:var(--f-mono)}
+.speed button+button{border-left:1px solid var(--line)}
+.speed button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.tl-wrap{position:relative}
+.tl-wrap canvas{display:block;width:100%;touch-action:none}
+
+.panel{grid-column:2;grid-row:2/4;min-height:0;display:flex;flex-direction:column;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);overflow:hidden}
+.panel-head{padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+.panel-head h2{margin:0;font-size:15px;font-weight:700}
+.panel-head p{margin:2px 0 0;font-size:12px;color:var(--muted)}
+.panel-body{flex:1;min-height:0;overflow:auto;position:relative;padding:8px}
+.panel ul{list-style:none;margin:0;padding:0}
+.person{width:100%;display:grid;grid-template-columns:36px minmax(0,1fr) auto;grid-template-areas:"sw name status" "sw stats stats";gap:2px 10px;align-items:center;padding:10px;border:1px solid transparent;border-radius:8px;background:none;text-align:left;cursor:pointer;color:var(--ink)}
+.person:hover{background:var(--band)}
+.person[aria-pressed="true"]{background:var(--raised);border-color:var(--line)}
+.sw{grid-area:sw;width:36px;height:36px;border-radius:50%;background:var(--c);box-shadow:inset 0 0 0 2px rgba(255,255,255,.35);overflow:hidden}
+.sw svg{width:100%;height:100%;display:block}
+.pname{grid-area:name;font-weight:700;font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pname .lives{font-size:11px;font-weight:600;color:var(--muted)}
+.status{grid-area:status;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.status.dead{color:var(--danger);border-color:currentColor}
+.status.on{color:var(--live);border-color:currentColor}
+.pstats{grid-area:stats;font-size:12px;color:var(--muted)}
+.pstats b{color:var(--ink);font-weight:600;font-family:var(--f-mono)}
+.detail{margin:0 0 10px 27px;padding:4px 10px 10px;border-left:3px solid var(--c)}
+.detail h3{margin:10px 0 6px;font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--muted)}
+.detail h3.life{display:flex;align-items:center;gap:8px;font-size:13px;letter-spacing:0;color:var(--c)}
+.traits{display:flex;flex-wrap:wrap;gap:4px}
+.traits span{font-size:12px;padding:2px 8px;border-radius:6px;background:var(--band)}
+.spark{width:100%;height:46px;display:block}
+.detail .ev button{padding:4px 6px}
+.now-row{display:flex;flex-wrap:wrap;gap:6px;padding:4px 4px 10px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.now-row:empty{display:none}
+.who-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 6px;border-radius:999px;border:1px solid var(--line);background:var(--raised);font-size:12px;cursor:pointer;color:var(--ink)}
+.who-chip i{width:10px;height:10px;border-radius:50%;background:var(--c)}
+.who-chip.off{color:var(--muted)}
+.who-chip.off i{background:none;box-shadow:inset 0 0 0 2px var(--c)}
+.who-chip.gone{color:var(--muted);text-decoration:line-through}
+.who-chip[aria-pressed="true"]{border-color:var(--ink);font-weight:600}
+.day{position:sticky;top:-8px;z-index:1;padding:8px 8px 4px;font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--muted);background:var(--surface)}
+.filter-note{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 4px 8px;padding:6px 10px;border-radius:8px;background:var(--band);font-size:12px}
+.filter-note button{border:0;background:none;cursor:pointer;font-weight:600;color:var(--accent)}
+.empty{padding:24px 12px;color:var(--muted);font-size:13px;text-align:center}
+@media (max-width:920px),(max-height:520px){
+  body{overflow:auto}
+  .app{height:auto;grid-template-columns:minmax(0,1fr)}
+  .map{grid-row:auto;height:62vh;min-height:320px}
+  .timeline{grid-row:auto}
+  .panel{grid-column:1;grid-row:auto;max-height:70vh}
+  .legend{display:none}
+  .layers{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  .chip{flex:none}
+  .chip .n{display:none}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <p class="eyebrow" id="eyebrow">PROJECT ZOMBOID</p>
+      <h1>세션 동선 지도</h1>
+      <p class="sub" id="sub"></p>
+    </div>
+    <div class="mtabs" role="tablist" aria-label="보기 방식">
+      <button role="tab" id="tab-people" aria-selected="true">인물별</button>
+      <button role="tab" id="tab-time" aria-selected="false">시간순</button>
+    </div>
+  </header>
+
+  <div class="map" id="map">
+    <canvas id="mapc" aria-label="관측 위치 지도"></canvas>
+    <div class="layers" id="layers"></div>
+    <div class="zoom">
+      <button id="zin" aria-label="확대">+</button>
+      <button id="zout" aria-label="축소">−</button>
+      <button id="zfit" aria-label="전체 맞춤" title="전체 맞춤">⤢</button>
+    </div>
+    <div class="legend"><span><i></i>도보</span><span><i class="dash"></i>차량</span><span><span class="bub">5</span>가까운 기록 묶음 · 누르면 펼침</span></div>
+    <div class="coords" id="coords" hidden></div>
+    <div class="tip" id="tip" hidden></div>
+    <div class="pop" id="pop" hidden></div>
+  </div>
+
+  <section class="timeline" aria-label="타임라인">
+    <div class="tl-bar">
+      <button class="play" id="play" aria-label="재생" data-playing="false"><svg viewBox="0 0 16 16"><path d="M4 2l10 6-10 6z" fill="currentColor"/></svg></button>
+      <div class="clock"><span class="g" id="clock-g">—</span><span class="r" id="clock-r"></span></div>
+      <button class="live-btn" id="live" hidden>● 실시간</button>
+      <span class="tl-note" id="tl-note"></span>
+      <div class="speed" id="speed" role="group" aria-label="재생 속도" hidden>
+        <button data-v="60" aria-pressed="false">1분/초</button>
+        <button data-v="300" aria-pressed="true">5분/초</button>
+        <button data-v="900" aria-pressed="false">15분/초</button>
+      </div>
+    </div>
+    <div class="tl-wrap" id="tlwrap"><canvas id="tlc" aria-label="인물별 접속 타임라인"></canvas></div>
+  </section>
+
+  <aside class="panel">
+    <div class="panel-head"><h2 id="ph-title"></h2><p id="ph-sub"></p></div>
+    <div class="panel-body" id="pbody"></div>
+  </aside>
+</div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const pad2 = n => String(n).padStart(2, '0');
+const SID = new URLSearchParams(location.search).get('id');
+if (location.hash === '#embed') document.documentElement.classList.add('embedded');
+
+// town labels: positions from the game's worldmap-annotations.lua, Korean names from Translate/KO/MapLabel.json
+const TOWNS = [['웨스트 포인트', 11654, 6864], ['리버사이드', 6450, 5430], ['멀드로', 10754, 9926], ['브랜든버그', 2056, 6070], ['에크론', 634, 9746], ['어빙턴', 2427, 14185],
+  ['에코 크릭', 3589, 10952], ['루이빌', 13077, 2238], ['마치 리지', 10130, 12801], ['팔라스 레이크', 7253, 8279], ['로즈우드', 8159, 11661], ['밸리 스테이션', 13447, 5278]];
+const WORLD = { w: 19968, h: 16128 };
+const COLORS = ['#1565C0', '#DC5F1A', '#8C37B4', '#CD2837', '#008796', '#2E7D32', '#A8CC1F', '#CC1FA0', '#6D4C41', '#3949AB', '#00ACC1', '#7CB342', '#F4A300', '#546E7A', '#E53935', '#5D4037'];
+const KINDS = {
+  death: { label: '사망', group: 'death', pri: 9, g: 'death' }, sleep: { label: '숙박', group: 'sleep', pri: 7, g: 'sleep' }, bitten: { label: '물림', group: 'bite', pri: 8, g: 'bite' },
+  newchar: { label: '새 캐릭터', group: 'conn', pri: 6, g: 'spawn' }, levelup: { label: '스킬 상승', group: 'skill', pri: 5, g: 'skill' },
+  kill_milestone: { label: '킬 달성', group: 'skill', pri: 5, g: 'skill' }, weapon: { label: '장비', group: 'item', pri: 4, g: 'item' },
+  injury: { label: '부상', group: 'injury', pri: 3, g: 'injury' }, vehicle_in: { label: '차량 탑승', group: 'car', pri: 2, g: 'car' },
+  vehicle_out: { label: '차량 하차', group: 'car', pri: 2, g: 'car' }, enter: { label: '건물', group: 'enter', pri: 1, g: 'enter' },
+  join: { label: '접속', group: 'conn', pri: 1, g: 'login' }, leave: { label: '접속 종료', group: 'conn', pri: 1, g: 'logout' },
+  kill: { label: '좀비 처치', group: 'kill', pri: 0, g: 'kill' },
+};
+const kindOf = k => KINDS[k] || { label: k, group: 'other', pri: 0, g: 'kill' };
+const GROUPS = [['death', '사망'], ['sleep', '숙박'], ['skill', '스킬'], ['bite', '물림'], ['injury', '부상'], ['item', '장비'], ['car', '차량'], ['conn', '접속'], ['kill', '좀비 처치'], ['enter', '건물']];
+const GROUP_GLYPH = { death: 'death', sleep: 'sleep', skill: 'skill', bite: 'bite', injury: 'injury', item: 'item', car: 'car', conn: 'login', kill: 'kill', enter: 'enter' };
+const SKILLS = {Cooking:'요리',Woodwork:'목공',SmallBlunt:'짧은 둔기',Blunt:'긴 둔기',Axe:'도끼',Aiming:'조준',Reloading:'재장전',Sprinting:'달리기',Lightfoot:'조용한 발걸음',Nimble:'민첩',Sneak:'은신',Fitness:'체력',Strength:'근력',Mechanics:'정비',Electricity:'전기',Farming:'농사',Fishing:'낚시',Trapping:'덫',PlantScavenging:'채집',Doctor:'응급처치',Tailoring:'재봉',MetalWelding:'용접',Maintenance:'유지보수',LongBlade:'장검',SmallBlade:'단검',Spear:'창',Cleaning:'청소',Carving:'조각',Pottery:'도예',Butchering:'도축',Husbandry:'축산',Tracking:'추적',Blacksmith:'대장장이',Masonry:'석공',Glassmaking:'유리 공예',FlintKnapping:'뗀석기',Mechanic:'정비'};
+const PARTS = {Hand_L:'왼손',Hand_R:'오른손',ForeArm_L:'왼쪽 아래팔',ForeArm_R:'오른쪽 아래팔',UpperArm_L:'왼쪽 위팔',UpperArm_R:'오른쪽 위팔',Torso_Upper:'가슴',Torso_Lower:'배',Head:'머리',Neck:'목',Groin:'사타구니',UpperLeg_L:'왼쪽 허벅지',UpperLeg_R:'오른쪽 허벅지',LowerLeg_L:'왼쪽 종아리',LowerLeg_R:'오른쪽 종아리',Foot_L:'왼발',Foot_R:'오른발'};
+const WOUND_KO = { scratch: '긁힘', laceration: '찢어진 상처', deep: '깊은 상처', fracture: '골절', burn: '화상', bullet: '총상', glass: '박힌 유리', bite: '물림' };
+const SEVERE_WOUNDS = new Set(['deep', 'fracture', 'bullet', 'bite']);
+const ROOMS = { kitchen: '부엌', bedroom: '침실', livingroom: '거실', bathroom: '화장실', garage: '차고', garagestorage: '차고 창고', lobby: '로비', hall: '복도', hallway: '복도',
+  storage: '창고', office: '사무실', diningroom: '식당', laundry: '세탁실', closet: '옷장', bar: '바', restaurant: '식당', grocery: '식료품점', shed: '헛간', '건물': '건물' };
+
+/* ---------- glyphs: svg for HTML, canvas for the map ---------- */
+const SVG = {
+  death: '<path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" fill="none"/>',
+  skill: '<path d="M7 1l1.8 3.9 4.2.5-3.1 2.9.8 4.2L7 10.4 3.3 12.5l.8-4.2L1 5.4l4.2-.5z" fill="currentColor"/>',
+  bite: '<circle cx="7" cy="7" r="5.2" fill="currentColor"/><circle cx="7" cy="7" r="1.9" fill="var(--surface)"/>',
+  injury: '<path d="M7 2.5v9M2.5 7h9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
+  item: '<path d="M7 1.5l5.5 5.5L7 12.5 1.5 7z" fill="currentColor"/>',
+  car: '<rect x="1.5" y="3.8" width="11" height="6.4" rx="2" fill="currentColor"/>',
+  login: '<path d="M3.5 2l8.5 5-8.5 5z" fill="currentColor"/>',
+  logout: '<rect x="3" y="3" width="8" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="2"/>',
+  spawn: '<circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="2.4"/>',
+  kill: '<circle cx="7" cy="7" r="3.4" fill="currentColor"/>',
+  sleep: '<path d="M7 1.2l6 5.4h-1.8V13H2.8V6.6H1z" fill="currentColor"/>',
+  enter: '<rect x="3" y="1.8" width="8" height="10.4" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8.6" cy="7.4" r="1.1" fill="currentColor"/>',
+};
+const svg = (g, color) => `<svg viewBox="0 0 14 14" aria-hidden="true"${color ? ` style="color:${color}"` : ''}>${SVG[g] || SVG.kill}</svg>`;
+let K = {};
+function readTokens(){
+  const cs = getComputedStyle(document.documentElement);
+  for (const n of ['surface', 'raised', 'ink', 'muted', 'line', 'accent', 'band', 'wash', 'casing', 'danger', 'bg']) K[n] = cs.getPropertyValue('--' + n).trim();
+  K.font = cs.getPropertyValue('--f-body') || 'sans-serif'; K.mono = cs.getPropertyValue('--f-mono') || 'monospace';
+}
+function glyph(c, g, x, y, color, s = 6){
+  c.save(); c.translate(x, y); c.lineJoin = 'round'; c.lineCap = 'round';
+  const fillShape = () => { c.fillStyle = color; c.strokeStyle = K.casing; c.lineWidth = 2; c.stroke(); c.fill(); };
+  const strokeShape = w => { c.strokeStyle = K.casing; c.lineWidth = w + 3; c.stroke(); c.strokeStyle = color; c.lineWidth = w; c.stroke(); };
+  c.beginPath();
+  switch (g){
+    case 'death': c.moveTo(-s, -s); c.lineTo(s, s); c.moveTo(s, -s); c.lineTo(-s, s); strokeShape(s * .55); break;
+    case 'enter': c.rect(-s * .55, -s * .8, s * 1.1, s * 1.6); strokeShape(s * .3); break;
+    case 'sleep': c.moveTo(0, -s * 1.1); c.lineTo(s * 1.1, -s * .05); c.lineTo(s * .78, -s * .05); c.lineTo(s * .78, s * .95);
+      c.lineTo(-s * .78, s * .95); c.lineTo(-s * .78, -s * .05); c.lineTo(-s * 1.1, -s * .05); c.closePath(); fillShape(); break;
+    case 'skill': for (let i = 0; i < 10; i++){ const r = i % 2 ? s * .48 : s * 1.15, a = -Math.PI / 2 + i * Math.PI / 5; c.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+      c.closePath(); fillShape(); break;
+    case 'bite': c.arc(0, 0, s * .85, 0, Math.PI * 2); fillShape(); c.beginPath(); c.arc(0, 0, s * .32, 0, Math.PI * 2); c.fillStyle = K.casing; c.fill(); break;
+    case 'injury': c.moveTo(0, -s * .8); c.lineTo(0, s * .8); c.moveTo(-s * .8, 0); c.lineTo(s * .8, 0); strokeShape(s * .45); break;
+    case 'item': c.moveTo(0, -s); c.lineTo(s, 0); c.lineTo(0, s); c.lineTo(-s, 0); c.closePath(); fillShape(); break;
+    case 'car': c.roundRect(-s, -s * .6, s * 2, s * 1.2, s * .35); fillShape(); break;
+    case 'login': c.moveTo(-s * .6, -s * .85); c.lineTo(s * .9, 0); c.lineTo(-s * .6, s * .85); c.closePath(); fillShape(); break;
+    case 'logout': c.rect(-s * .65, -s * .65, s * 1.3, s * 1.3); strokeShape(s * .32); break;
+    case 'spawn': c.arc(0, 0, s * .75, 0, Math.PI * 2); strokeShape(s * .38); break;
+    default: c.arc(0, 0, s * .45, 0, Math.PI * 2); fillShape();
+  }
+  c.restore();
+}
+
+/* ---------- data: rows arrive live from /api/track and are folded into characters + events ---------- */
+// row: [who, x, y, gameDate, gameTime, kind, detail, label, realMs, kills, extra]
+let rows = [];
+const P = [], byWho = new Map(), PLAYERS = [], colorOf = {}, EV = [];
+const S = { mode: 'people', sel: new Set(), T: 0, playing: false, speed: 300, flash: null, live: false, follow: true,
+  layers: { death: true, sleep: true, skill: true, bite: true, injury: false, item: false, car: false, conn: false, kill: false, enter: false } };
+try { const saved = JSON.parse(localStorage.getItem('pzmap-layers') || 'null'); if (saved) Object.assign(S.layers, saved); } catch (e) {}
+const A = () => rows.length ? rows[0][8] : Date.now();
+const B = () => Math.max(rows.length ? rows[rows.length - 1][8] : Date.now(), S.live ? Date.now() : 0);
+
+function ingest(data){
+  for (const r of data){
+    rows.push(r);
+    const [who, x, y, gd, gt, k, d, label, t, kills, extra] = r, player = who.replace(/ #\d+$/, '');
+    if (!(player in colorOf)){ colorOf[player] = COLORS[PLAYERS.length % COLORS.length]; PLAYERS.push(player); }
+    let p = byWho.get(who);
+    if (!p){
+      p = { id: P.length, label: who, player, color: colorOf[player], points: [], evs: [], spans: [], deathEv: null, killSeries: [], dist: 0, carDist: 0,
+        name: '', prof: '', traits: [], profiles: [], inCar: false, bbox: [Infinity, Infinity, -Infinity, -Infinity] };
+      P.push(p); byWho.set(who, p);
+    }
+    if (k === 'vehicle_in') p.inCar = true; else if (k === 'vehicle_out' || k === 'death') p.inCar = false;
+    if (x != null){
+      const prev = p.points[p.points.length - 1];
+      if (prev){ const dd = Math.hypot(x - prev[1], y - prev[2]); if (dd < 300){ p.dist += dd; if (p.inCar) p.carDist += dd; } }   // >300 tiles = respawn, not travel
+      p.points.push([t, x, y, p.inCar]);
+      const b = p.bbox; b[0] = Math.min(b[0], x); b[1] = Math.min(b[1], y); b[2] = Math.max(b[2], x); b[3] = Math.max(b[3], y);
+    }
+    // online spans: a logout or a gap over 2 minutes ends one
+    const sp = p.spans[p.spans.length - 1];
+    if (k === 'leave'){ if (sp) sp[1] = t; p.closed = true; }
+    else if (!sp || p.closed || t - sp[1] > 120000){ p.spans.push([t, t]); p.closed = false; }
+    else sp[1] = t;
+    if (kills != null && (!p.killSeries.length || p.killSeries[p.killSeries.length - 1][1] !== kills)) p.killSeries.push([t, kills]);
+    if (k === 'newchar' && extra){ p.name = extra.n; p.prof = extra.prof; p.traits = extra.traits ? extra.traits.split(/,\s*/) : []; }
+    if (k === 'profile'){ if (extra) p.profiles.push([t, extra]); continue; }   // state snapshots, not feed events
+    if (k === 'pos') continue;
+    const e = { p, t, k, d: d || '', label, x, y, gd, gt, extra };
+    p.evs.push(e); EV.push(e);
+    if (k === 'death' && !p.deathEv) p.deathEv = e;
+  }
+  EV.sort((a, b) => a.t - b.t || kindOf(b.k).pri - kindOf(a.k).pri);
+  EV.forEach((e, i) => e.i = i);
+}
+const killsOf = p => p.killSeries.length ? p.killSeries[p.killSeries.length - 1][1] - p.killSeries[0][1] : 0;
+const online = p => p.spans.reduce((a, s) => a + s[1] - s[0], 0);
+
+/* ---------- helpers ---------- */
+const hm = t => { const d = new Date(t); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); };
+const md = gd => { const [, m, d] = gd.split('-').map(Number); return `${m}월 ${d}일`; };
+const days = () => { const out = []; for (const r of rows) if (!out.length || out[out.length - 1].date !== r[3]) out.push({ date: r[3], t: r[8] }); return out; };
+const dayNo = date => [...new Set(rows.map(r => r[3]))].indexOf(date) + 1;
+function countLE(arr, t){ let lo = 0, hi = arr.length; while (lo < hi){ const m = (lo + hi) >> 1; if ((arr[m][0] ?? arr[m].t) <= t) lo = m + 1; else hi = m; } return lo; }
+function rowAt(T){ let lo = 0, hi = rows.length; while (lo < hi){ const m = (lo + hi) >> 1; if (rows[m][8] <= T) lo = m + 1; else hi = m; } return rows[Math.max(0, lo - 1)]; }
+const fmtDur = ms => { const h = Math.floor(ms / 3600e3), m = Math.round(ms % 3600e3 / 60e3); return h ? h + '시간 ' + m + '분' : m + '분'; };
+const km = tiles => (tiles / 1000).toFixed(1) + 'km';
+function placeName(x, y){
+  let best = null, bd = Infinity;
+  for (const [n, tx, ty] of TOWNS){ const d = Math.hypot(x - tx, y - ty); if (d < bd){ bd = d; best = [n, tx, ty]; } }
+  if (bd < 150) return best[0] + ' 중심부';
+  const a = (Math.atan2(-(y - best[2]), x - best[1]) * 180 / Math.PI + 360) % 360, D = ['동', '북동', '북', '북서', '서', '남서', '남', '남동'][Math.round(a / 45) % 8];
+  return bd < 900 ? `${best[0]} ${D}쪽` : `${best[0]}에서 ${D}쪽 ${(bd / 1000).toFixed(1)}km`;
+}
+function describe(e){
+  switch (e.k){
+    case 'levelup': { const x = e.extra; return x ? `${SKILLS[x.perk] || x.perk} Lv ${x.level}` : e.d; }
+    case 'bitten': return '물림' + (e.d ? ' · ' + e.d : '');
+    case 'injury': return '부상 · ' + e.d;
+    case 'weapon': return '장비 · ' + e.d;
+    case 'enter': return '건물 · ' + (ROOMS[e.d] || e.d);
+    case 'kill': return `좀비 처치 · ${e.extra ? e.extra.count : (e.d.match(/\d+/) || [''])[0]}마리`;
+    case 'newchar': { const x = e.extra; return '새 캐릭터' + (x ? ' · ' + [x.n, x.prof].filter(Boolean).join(' · ') : ''); }
+    case 'death': return '사망';
+    case 'sleep': return e.extra ? '숙박 · 잠으로 ' + fmtDur(e.extra.mins * 60e3) + ' 건너뜀' : '숙박';
+    default: return kindOf(e.k).label + (e.d && !['join', 'leave', 'vehicle_in', 'vehicle_out'].includes(e.k) ? ' · ' + e.d : '');
+  }
+}
+
+/* ---------- view ---------- */
+const mapEl = $('map'), canvas = $('mapc'), ctx = canvas.getContext('2d');
+const tlCanvas = $('tlc'), tctx = tlCanvas.getContext('2d');
+const view = { s: .05, ox: 10000, oy: 9000 };
+let W = 0, H = 0, DPR = 1, MIN_S = .02, tween = null, hits = [], frame = 0, fitted = false;
+const MAX_S = 8;   // 8 screen px per game tile
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const toS = (x, y) => [(x - view.ox) * view.s, (y - view.oy) * view.s];
+const toW = (sx, sy) => [sx / view.s + view.ox, sy / view.s + view.oy];
+function req(){ if (!frame) frame = requestAnimationFrame(tick); }
+function clampView(){
+  const cx = view.ox + W / 2 / view.s, cy = view.oy + H / 2 / view.s;
+  view.ox = clamp(cx, 0, WORLD.w) - W / 2 / view.s; view.oy = clamp(cy, 0, WORLD.h) - H / 2 / view.s;
+}
+function setView(s, cx, cy, animate = true){
+  s = clamp(s, MIN_S, MAX_S);
+  if (!animate || reduced){ view.s = s; view.ox = cx - W / 2 / s; view.oy = cy - H / 2 / s; clampView(); tween = null; req(); return; }
+  tween = { from: { s: view.s, cx: view.ox + W / 2 / view.s, cy: view.oy + H / 2 / view.s }, to: { s, cx, cy }, t0: performance.now(), dur: 450 }; req();
+}
+function fitBounds(b, pad = 70, animate = true){
+  const w = Math.max(b[2] - b[0], 60), h = Math.max(b[3] - b[1], 60);
+  setView(Math.min((W - pad * 2) / w, (H - pad * 2) / h), (b[0] + b[2]) / 2, (b[1] + b[3]) / 2, animate);
+}
+function zoomAt(f, sx, sy){
+  const [wx, wy] = toW(sx, sy), s = clamp(view.s * f, MIN_S, MAX_S);
+  view.s = s; view.ox = wx - sx / s; view.oy = wy - sy / s; clampView(); tween = null; req();
+}
+const unionBox = ps => { const bs = ps.map(p => p.bbox).filter(b => b[0] !== Infinity); return bs.length ? [Math.min(...bs.map(b => b[0])), Math.min(...bs.map(b => b[1])), Math.max(...bs.map(b => b[2])), Math.max(...bs.map(b => b[3]))] : [10200, 9300, 11300, 10500]; };
+const allBox = () => unionBox(P);
+const selBox = () => unionBox(P.filter(isSel));
+
+/* ---------- selection ---------- */
+const isSel = p => S.sel.has(p.player);
+const visiblePerson = p => !S.sel.size || isSel(p);
+const dimmed = p => S.sel.size > 0 && !isSel(p);
+const livesOf = name => P.filter(p => p.player === name);
+const selNames = () => [...S.sel].map(n => `<b style="color:${colorOf[n]}">${esc(n)}</b>`).join(', ');
+function posAt(p, T){
+  const pts = p.points, i = countLE(pts, T) - 1; if (i < 0) return null;
+  const a = pts[i], b = pts[i + 1];
+  if (b && b[0] - a[0] < 120000 && b[0] > a[0] && Math.hypot(b[1] - a[1], b[2] - a[2]) < 300){ const f = (T - a[0]) / (b[0] - a[0]); return { x: a[1] + (b[1] - a[1]) * f, y: a[2] + (b[2] - a[2]) * f, i, v: b[3] }; }
+  return { x: a[1], y: a[2], i, v: a[3] };
+}
+const inSpan = (p, T) => p.spans.some(s => T >= s[0] - 30000 && T <= s[1] + 90000);
+const alive = (p, T) => !(p.deathEv && p.deathEv.t <= T);
+
+/* ---------- map drawing ---------- */
+const tiles = new Map();
+function drawTiles(){
+  const L = clamp(Math.round(Math.log2(1 / view.s)), 0, 4), span = 256 * 2 ** L;
+  const [wx0, wy0] = toW(0, 0), [wx1, wy1] = toW(W, H);
+  ctx.imageSmoothingEnabled = view.s * span / 256 < 2;
+  for (let ty = Math.max(0, Math.floor(wy0 / span)); ty <= Math.min(Math.ceil(WORLD.h / span) - 1, Math.floor(wy1 / span)); ty++)
+    for (let tx = Math.max(0, Math.floor(wx0 / span)); tx <= Math.min(Math.ceil(WORLD.w / span) - 1, Math.floor(wx1 / span)); tx++){
+      const key = `${L}/tile${tx}x${ty}`;
+      let img = tiles.get(key);
+      if (!img){ img = new Image(); img.onload = req; img.src = `maptiles/${key}.png`; tiles.set(key, img); }
+      if (img.complete && img.naturalWidth){ const [sx, sy] = toS(tx * span, ty * span); ctx.drawImage(img, sx, sy, span * view.s + .5, span * view.s + .5); }
+    }
+}
+function strokeRun(pts, i0, i1, tail, color, alpha, w){
+  if (i1 < i0 || (i1 === i0 && !tail)) return;
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  for (const pass of [0, 1]){
+    ctx.globalAlpha = pass ? alpha : alpha * .8;
+    ctx.strokeStyle = pass ? color : K.casing; ctx.lineWidth = pass ? w : w + 3;
+    let veh = null; ctx.beginPath();
+    const seg = (a, b, v) => {
+      if (Math.hypot(b[0] - a[0], b[1] - a[1]) > 300 * view.s){ veh = null; ctx.stroke(); ctx.beginPath(); return; }   // respawn jump: no line
+      if (v !== veh){ if (veh !== null){ ctx.setLineDash(veh && pass ? [7, 5] : []); ctx.stroke(); ctx.beginPath(); } veh = v; ctx.moveTo(...a); }
+      ctx.lineTo(...b);
+    };
+    for (let i = i0 + 1; i <= i1; i++) seg(toS(pts[i - 1][1], pts[i - 1][2]), toS(pts[i][1], pts[i][2]), pts[i][3]);
+    if (tail) seg(toS(pts[i1][1], pts[i1][2]), toS(tail.x, tail.y), tail.v);
+    ctx.setLineDash(veh && pass ? [7, 5] : []); ctx.stroke(); ctx.setLineDash([]);
+  }
+  ctx.globalAlpha = 1;
+}
+function cluster(items, R){
+  items.sort((a, b) => b.pri - a.pri);
+  const out = [];
+  for (const it of items){
+    let best = null, bd = R * R;
+    for (const c of out){ const dx = c.sx - it.sx, dy = c.sy - it.sy, d = dx * dx + dy * dy; if (d <= bd){ bd = d; best = c; } }
+    if (best) best.items.push(it); else out.push({ sx: it.sx, sy: it.sy, items: [it] });
+  }
+  return out;
+}
+const onLayer = e => S.layers[kindOf(e.k).group];
+function drawLabel(text, x, y, color){
+  ctx.font = '600 12px ' + K.font;
+  const w = ctx.measureText(text).width;
+  ctx.fillStyle = K.raised; ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.roundRect(x, y - 10, w + 12, 20, 6); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = K.ink; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(text, x + 6, y + .5);
+}
+function draw(){
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = K.surface; ctx.fillRect(0, 0, W, H);
+  drawTiles();
+  ctx.fillStyle = K.wash; ctx.fillRect(0, 0, W, H);
+  ctx.font = '700 13px ' + K.font; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.lineJoin = 'round';
+  for (const [n, x, y] of TOWNS){ const [sx, sy] = toS(x, y); ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 4; ctx.strokeText(n, sx, sy); ctx.fillStyle = '#F2F3EE'; ctx.fillText(n, sx, sy); }
+  ctx.textAlign = 'left';
+  hits = [];
+  const T = S.T, timeMode = S.mode === 'time';
+  const order = P.filter(p => !isSel(p)).concat(P.filter(isSel));
+  const w = Math.max(2, Math.min(4, view.s * 2.2 + 2));
+
+  // paths: everything in people mode; in time mode the path so far, faded, with the last 30 minutes bright
+  for (const p of order){
+    const pos = posAt(p, T); if (!pos) continue;
+    const dim = dimmed(p), tail = alive(p, T) ? pos : null;
+    if (timeMode){
+      strokeRun(p.points, 0, pos.i, tail, p.color, dim ? .1 : .32, w * .8);
+      if (!dim){ const j = Math.max(0, countLE(p.points, T - 1800e3) - 1); strokeRun(p.points, Math.min(j, pos.i), pos.i, tail, p.color, 1, w + .5); }
+    } else strokeRun(p.points, 0, p.points.length - 1, null, p.color, dim ? .14 : (S.sel.size ? 1 : .85), isSel(p) ? w + 1.5 : w);
+  }
+  // start markers for the selected players' characters
+  for (const p of P.filter(isSel)){
+    const a = p.points[0]; if (!a || a[0] > T) continue;
+    const [x, y] = toS(a[1], a[2]);
+    ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fillStyle = K.raised; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = p.color; ctx.stroke();
+    if (S.sel.size === 1) drawLabel(livesOf(p.player).length > 1 ? p.label + ' 첫 관측' : '첫 관측', x + 11, y, p.color);
+  }
+  // events, grouped by screen distance: the ring is split by how many of the records belong to each person
+  const items = [];
+  for (const e of EV){
+    if (e.k === 'sleep' || e.t > T || e.x == null || !onLayer(e) || !visiblePerson(e.p)) continue;
+    const [sx, sy] = toS(e.x, e.y);
+    if (sx < -40 || sy < -40 || sx > W + 40 || sy > H + 40) continue;
+    items.push({ sx, sy, pri: kindOf(e.k).pri, e });
+  }
+  for (const c of cluster(items, 24)){
+    if (c.items.length === 1){ const e = c.items[0].e; glyph(ctx, kindOf(e.k).g, c.sx, c.sy, e.k === 'death' ? K.danger : e.p.color, 6.5); hits.push({ type: 'ev', sx: c.sx, sy: c.sy, r: 10, items: [e] }); continue; }
+    const n = c.items.length, r = 11 + Math.min(9, Math.sqrt(n) * 1.7);
+    ctx.beginPath(); ctx.arc(c.sx, c.sy, r, 0, Math.PI * 2); ctx.fillStyle = K.raised; ctx.fill();
+    const counts = new Map(); c.items.forEach(it => counts.set(it.e.p.player, (counts.get(it.e.p.player) || 0) + 1));
+    let a = -Math.PI / 2; ctx.lineWidth = 4.5;
+    for (const [pl, k] of counts){ const da = k / n * Math.PI * 2; ctx.beginPath(); ctx.arc(c.sx, c.sy, r - 2.2, a, a + da); ctx.strokeStyle = colorOf[pl]; ctx.stroke(); a += da; }
+    ctx.fillStyle = K.ink; ctx.font = '600 11px ' + K.mono;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(n), c.sx, c.sy + .5); ctx.textAlign = 'left';
+    glyph(ctx, kindOf(c.items[0].e.k).g, c.sx + r * .78, c.sy - r * .78, K.ink, 4.2);
+    hits.push({ type: 'ev', sx: c.sx, sy: c.sy, r: r + 2, items: c.items.map(it => it.e) });
+  }
+  // houses go over the event bubbles: a shelter usually sits where many other records pile up
+  if (S.layers.sleep) drawSleepBases();
+  // current / last positions, grouped
+  const heads = [];
+  for (const p of P){
+    if (!visiblePerson(p) || !alive(p, T)) continue;
+    const pos = posAt(p, T); if (!pos) continue;
+    const [sx, sy] = toS(pos.x, pos.y);
+    heads.push({ sx, sy, pri: inSpan(p, T) ? 2 : 1, p, on: inSpan(p, T) });
+  }
+  for (const c of cluster(heads, 26)){
+    if (c.items.length === 1){
+      const h = c.items[0];
+      ctx.globalAlpha = h.on ? 1 : .55; dot(h.p, c.sx, c.sy, 8); ctx.globalAlpha = 1;
+      drawLabel(h.p.label + (h.on ? '' : ' · 오프라인'), c.sx + 12, c.sy, h.p.color);
+      hits.push({ type: 'head', sx: c.sx, sy: c.sy, r: 12, people: [h.p] });
+    } else {
+      const ps = c.items.map(h => h.p);
+      ps.forEach((p, i) => dot(p, c.sx + i * 9, c.sy, 8));
+      drawLabel(ps.length + '명 · ' + ps.map(p => p.label).join(', '), c.sx + ps.length * 9 + 6, c.sy, K.ink);
+      hits.push({ type: 'head', sx: c.sx + (ps.length - 1) * 4.5, sy: c.sy, r: 12 + ps.length * 4.5, people: ps });
+    }
+  }
+  if (S.flash){
+    const age = (performance.now() - S.flash.t0) / 1100;
+    if (age >= 1) S.flash = null;
+    else { const [x, y] = toS(S.flash.x, S.flash.y); ctx.beginPath(); ctx.arc(x, y, 10 + age * 34, 0, Math.PI * 2); ctx.globalAlpha = 1 - age; ctx.lineWidth = 3; ctx.strokeStyle = K.accent; ctx.stroke(); ctx.globalAlpha = 1; }
+  }
+}
+/* Nights slept, merged into houses: within 35 tiles is the same shelter, then houses that overlap on screen merge again.
+   More person-nights -> a bigger house, up to a cap. */
+const SLEEP_TILES = 35;
+const houseSize = n => n >= 11 ? 15 : n >= 6 ? 13 : n >= 3 ? 11 : n === 2 ? 9 : 7.5;
+function drawSleepBases(){
+  const bases = [];
+  for (const e of EV){
+    if (e.k !== 'sleep' || e.t > S.T || e.x == null || !visiblePerson(e.p)) continue;
+    let best = null, bd = SLEEP_TILES;
+    for (const b of bases){ const d = Math.hypot(b.x - e.x, b.y - e.y); if (d <= bd){ bd = d; best = b; } }
+    if (best){ best.items.push(e); best.x += (e.x - best.x) / best.items.length; best.y += (e.y - best.y) / best.items.length; }
+    else bases.push({ x: e.x, y: e.y, items: [e] });
+  }
+  const onScreen = bases.map(b => { const [sx, sy] = toS(b.x, b.y); return { sx, sy, pri: b.items.length, b }; })
+    .filter(h => h.sx > -40 && h.sy > -40 && h.sx < W + 40 && h.sy < H + 40);
+  for (const c of cluster(onScreen, 26)){
+    const evs = c.items.flatMap(h => h.b.items), n = evs.length, s = houseSize(n);
+    const people = [...new Set(evs.map(e => e.p.player))];
+    const x = c.sx, y = c.sy - s * .3;
+    ctx.save(); ctx.translate(x, y); ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(0, -s * 1.1); ctx.lineTo(s * 1.15, -s * .05); ctx.lineTo(s * .8, -s * .05); ctx.lineTo(s * .8, s * .95);
+    ctx.lineTo(-s * .8, s * .95); ctx.lineTo(-s * .8, -s * .05); ctx.lineTo(-s * 1.15, -s * .05); ctx.closePath();
+    ctx.lineWidth = 3; ctx.strokeStyle = K.casing; ctx.stroke();
+    ctx.fillStyle = people.length === 1 ? colorOf[people[0]] : K.raised; ctx.fill();
+    if (people.length > 1){ ctx.lineWidth = 1.6; ctx.strokeStyle = K.ink; ctx.stroke(); }
+    ctx.restore();
+    if (people.length > 1){   // who slept here: a row of colour dots under the house
+      const shown = people.slice(0, 6), dx = 7, x0 = x - (shown.length - 1) * dx / 2;
+      shown.forEach((pl, i) => { ctx.beginPath(); ctx.arc(x0 + i * dx, y + s * .95 + 6, 3.2, 0, Math.PI * 2); ctx.fillStyle = colorOf[pl]; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = K.casing; ctx.stroke(); });
+    }
+    if (n > 1){
+      ctx.font = '600 11px ' + K.mono; const label = String(n), tw = ctx.measureText(label).width;
+      const bx = x + s * .9, by = y - s * .95;
+      ctx.beginPath(); ctx.roundRect(bx - 2, by - 8, tw + 8, 16, 8); ctx.fillStyle = K.ink; ctx.fill();
+      ctx.fillStyle = K.bg; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(label, bx + 2, by + .5);
+    }
+    hits.push({ type: 'ev', sx: x, sy: y, r: s + 6, items: evs, sleep: true });
+  }
+}
+/* Person icon dressing from the recorded body state (client mod profile): a plaster for one or two light wounds,
+   bandages for three or more, any deep wound / fracture / gunshot / bite, or health 50 or less. */
+const WOUND_ART = {
+  1: '<g transform="rotate(-35 18 18)"><rect x="5" y="13.5" width="26" height="9" rx="4.5" fill="#f1c592" stroke="#a8743f" stroke-width="1"/>' +
+     '<rect x="14" y="13.5" width="8" height="9" fill="#e2a86d"/><circle cx="16" cy="16" r=".8" fill="#a8743f"/><circle cx="20" cy="16" r=".8" fill="#a8743f"/>' +
+     '<circle cx="16" cy="20" r=".8" fill="#a8743f"/><circle cx="20" cy="20" r=".8" fill="#a8743f"/></g>',
+  2: '<g stroke-linecap="round" fill="none"><path d="M2 12 34 8M2 21 34 25M10 2 14 34" stroke="#7d7d7d" stroke-width="7.4"/>' +
+     '<path d="M2 12 34 8M2 21 34 25M10 2 14 34" stroke="#fafafa" stroke-width="5.6"/>' +
+     '<path d="M3 11.6 33 7.9M3 21.2 33 25M10.6 3 13.4 33" stroke="#d9d9d9" stroke-width="1" stroke-dasharray="2 3"/></g>' +
+     '<circle cx="24" cy="23.5" r="2.4" fill="#c0392b" opacity=".8"/>',
+};
+const woundLevel = b => !b || (!b.items.length && !(b.overall != null && b.overall <= 50)) ? 0
+  : b.items.length >= 3 || b.items.some(w => w.severe) || (b.overall != null && b.overall <= 50) ? 2 : 1;
+const woundArt = level => level ? `<svg viewBox="0 0 36 36" aria-hidden="true">${WOUND_ART[level]}</svg>` : '';
+function woundIcon(p){
+  const b = stateAt(p, Math.min(S.T, p.deathEv ? p.deathEv.t - 1 : B())).body;
+  const tip = !b ? '몸 상태 기록 없음' : (b.items.length ? `상처 ${b.items.length}곳` : '상처 없음') + (b.overall != null ? ` · 체력 ${b.overall}` : '');
+  return { art: woundArt(woundLevel(b)), tip };
+}
+const WOUND_IMG = {};
+for (const level of [1, 2]){
+  const img = new Image(); img.onload = () => req();
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36">${WOUND_ART[level]}</svg>`);
+  WOUND_IMG[level] = img;
+}
+function dot(p, x, y, r){
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = p.color; ctx.fill();
+  const img = WOUND_IMG[woundLevel(stateAt(p, S.T).body)];
+  if (img && img.complete){ ctx.save(); ctx.clip(); ctx.globalAlpha *= .72; ctx.drawImage(img, x - r, y - r, r * 2, r * 2); ctx.restore(); }   // see-through so the colour still reads
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.lineWidth = 2.5; ctx.strokeStyle = K.casing; ctx.stroke();
+}
+
+/* ---------- timeline ---------- */
+const TL = { L: 92, top: 22, lane: 24, bottom: 20 };
+let TW = 0, TH = 0;
+const tx = t => TL.L + (B() > A() ? (t - A()) / (B() - A()) : 0) * (TW - TL.L - 14);
+const tt = x => A() + clamp((x - TL.L) / (TW - TL.L - 14), 0, 1) * (B() - A());
+function drawTimeline(){
+  TW = $('tlwrap').clientWidth; TH = TL.top + Math.max(1, PLAYERS.length) * TL.lane + TL.bottom;
+  tlCanvas.width = Math.round(TW * DPR); tlCanvas.height = Math.round(TH * DPR); tlCanvas.style.height = TH + 'px';
+  const c = tctx; c.setTransform(DPR, 0, 0, DPR, 0, 0); c.clearRect(0, 0, TW, TH);
+  if (!rows.length){ c.fillStyle = K.muted; c.font = '12px ' + K.font; c.textBaseline = 'middle'; c.fillText('아직 기록이 없습니다. 기록이 쌓이면 여기에 실시간으로 나타납니다.', 10, 30); return; }
+  const ds = days();
+  ds.forEach((d, i) => {
+    const x0 = tx(d.t), x1 = tx(i + 1 < ds.length ? ds[i + 1].t : B());
+    if (i % 2 === 0){ c.fillStyle = K.band; c.fillRect(x0, 0, x1 - x0, TH - TL.bottom); }
+    c.fillStyle = K.muted; c.font = '600 11px ' + K.font; c.textBaseline = 'middle';
+    const label = md(d.date) + ' · ' + (i + 1) + '일차', short = (+d.date.slice(5, 7)) + '/' + (+d.date.slice(8));
+    c.fillText(x1 - x0 > c.measureText(label).width + 10 ? label : (x1 - x0 > 34 ? short : ''), x0 + 5, 10);
+  });
+  const span = B() - A(), steps = [60e3, 300e3, 600e3, 900e3, 1800e3, 3600e3, 7200e3, 14400e3];
+  const step = steps.find(s => span / s <= Math.max(4, TW / 90)) || steps[steps.length - 1];
+  c.font = '500 10px ' + K.mono; c.textBaseline = 'alphabetic';
+  for (let t = Math.ceil(A() / step) * step; t <= B(); t += step){
+    const x = tx(t);
+    c.fillStyle = K.line; c.fillRect(Math.round(x), TL.top - 2, 1, TH - TL.top - TL.bottom + 4);
+    c.fillStyle = K.muted; c.fillText(hm(t), x - 14, TH - 5);
+  }
+  PLAYERS.forEach((name, li) => {
+    const y = TL.top + li * TL.lane + TL.lane / 2, lives = livesOf(name);
+    c.fillStyle = colorOf[name]; c.beginPath(); c.arc(10, y, 5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = K.ink; c.font = '600 12px ' + K.font; c.textBaseline = 'middle';
+    c.fillText(name.length > 9 ? name.slice(0, 8) + '…' : name, 22, y);
+    for (const p of lives){
+      const dim = dimmed(p);
+      c.globalAlpha = dim ? .18 : (isSel(p) ? 1 : .6); c.fillStyle = p.color;
+      for (const s of p.spans){ const x0 = tx(s[0]), x1 = Math.max(tx(s[1]), x0 + 2); c.beginPath(); c.roundRect(x0, y - 5, x1 - x0, 10, 4); c.fill(); }
+      c.globalAlpha = dim ? .25 : 1;
+      for (const e of p.evs) if (['death', 'sleep', 'bitten', 'newchar'].includes(e.k)) glyph(c, kindOf(e.k).g, tx(e.t), y, e.k === 'death' ? K.danger : p.color, e.k === 'death' ? 5 : 3.6);
+      c.globalAlpha = 1;
+    }
+  });
+  if (S.mode === 'time'){
+    const x = tx(S.T);
+    c.fillStyle = K.accent; c.fillRect(x - 1, 4, 2, TH - TL.bottom - 2);
+    c.beginPath(); c.moveTo(x - 6, 0); c.lineTo(x + 6, 0); c.lineTo(x, 8); c.closePath(); c.fill();
+    c.globalAlpha = .12; c.fillRect(x, TL.top - 2, TW - 14 - x, TH - TL.top - TL.bottom + 2); c.globalAlpha = 1;
+  }
+}
+
+/* ---------- panel ---------- */
+const pbody = $('pbody');
+let feedEls = [], feedT = [], feedIdx = -1;
+function evRow(e, opts = {}){
+  const time = opts.withDay ? (+e.gd.slice(5, 7)) + '/' + (+e.gd.slice(8)) + ' ' + e.gt : e.gt, text = describe(e);
+  return `<li class="ev" data-ev="${e.i}"><button title="${esc(e.p.label + ' · ' + text)}"><time>${esc(time)}</time>${svg(kindOf(e.k).g, e.k === 'death' ? 'var(--danger)' : e.p.color)}<span class="what">${opts.who === false ? '' : `<span class="who" style="color:${e.p.color}">${esc(e.p.label)}</span>`}${esc(text)}</span></button></li>`;
+}
+const personStatus = p => p.deathEv ? `<span class="status dead">사망 · ${md(p.deathEv.gd)} ${p.deathEv.gt}</span>`
+  : inSpan(p, B()) && S.live ? '<span class="status on">접속 중</span>' : '<span class="status">생존</span>';
+function spark(p){
+  const s = p.killSeries; if (s.length < 2) return '';
+  const a = A(), d = Math.max(1, B() - a), lo = s[0][1], hi = Math.max(lo + 1, s[s.length - 1][1]);
+  const pts = s.map(([t, v]) => `${((t - a) / d * 300).toFixed(1)},${(42 - (v - lo) / (hi - lo) * 38).toFixed(1)}`);
+  pts.push(`${((s[s.length - 1][0] - a) / d * 300).toFixed(1)},42`); pts.unshift(`${((s[0][0] - a) / d * 300).toFixed(1)},42`);
+  return `<h3>세션 중 처치 누적 (${lo} → ${s[s.length - 1][1]})</h3><svg class="spark" viewBox="0 0 300 46" preserveAspectRatio="none"><polygon points="${pts.join(' ')}" fill="${p.color}" opacity=".18"/><polyline points="${pts.slice(1, -1).join(' ')}" fill="none" stroke="${p.color}" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`;
+}
+function renderPeople(){
+  $('ph-title').textContent = '인물별 보기';
+  $('ph-sub').textContent = `${PLAYERS.length}명 · 캐릭터 ${P.length}개 · 이름을 누를 때마다 선택에 넣고 뺍니다 (여러 명 가능)`;
+  if (!PLAYERS.length){ pbody.innerHTML = '<p class="empty">아직 기록된 인물이 없습니다.</p>'; return; }
+  let html = S.sel.size ? `<div class="filter-note"><span>${selNames()} 선택됨</span><button data-clear>모두 보기</button></div>` : '';
+  html += '<ul>';
+  for (const name of PLAYERS){
+    const lives = livesOf(name), last = lives[lives.length - 1], on = S.sel.has(name);
+    const sum = f => lives.reduce((a, p) => a + f(p), 0), car = sum(p => p.carDist), wound = woundIcon(last);
+    html += `<li><button class="person" data-player="${esc(name)}" aria-pressed="${on}" style="--c:${colorOf[name]}">
+      <span class="sw" title="${wound.tip}">${wound.art}</span><span class="pname">${esc(name)}${lives.length > 1 ? ` <span class="lives">캐릭터 ${lives.length}</span>` : ''}</span>${personStatus(last)}
+      <span class="pstats">처치 <b>${sum(killsOf)}</b> · 이동 <b>${km(sum(p => p.dist))}</b>${car > 200 ? ` (차량 ${km(car)})` : ''} · 접속 <b>${fmtDur(sum(online))}</b></span></button>`;
+    if (on) for (const p of lives){   // one block per character: state belongs to a single life
+      const evs = p.evs.filter(onLayer);
+      html += `<div class="detail" style="--c:${p.color}">`;
+      if (lives.length > 1) html += `<h3 class="life">${esc(p.label)} ${personStatus(p)}</h3>`;
+      html += `<h3>${p.deathEv ? '사망 직전 상태' : '마지막 상태'}</h3><div class="st">${stateHtml(p, p.deathEv ? p.deathEv.t - 1 : B())}</div>`;
+      html += spark(p);
+      html += `<h3>기록 ${evs.length}건 · 위 지도 필터 기준</h3>`;
+      html += evs.length ? `<ul>${evs.map(e => evRow(e, { withDay: true, who: false })).join('')}</ul>` : '<p class="empty">켜진 필터에 해당하는 기록이 없습니다.</p>';
+      html += '</div>';
+    }
+    html += '</li>';
+  }
+  pbody.innerHTML = html + '</ul>';
+}
+function renderFeed(){
+  $('ph-title').textContent = '시간순 보기';
+  const list = EV.filter(e => onLayer(e) && visiblePerson(e.p));
+  $('ph-sub').textContent = `기록 ${list.length}건 · 항목을 누르면 그 시점으로 이동합니다`;
+  let html = '<div class="now-row" id="nowrow"></div>';
+  if (S.sel.size) html += `<div class="filter-note"><span>${selNames()}만 보는 중</span><button data-clear>모두 보기</button></div>`;
+  html += '<ul id="feed">';
+  let day = null;
+  for (const e of list){
+    if (e.gd !== day){ day = e.gd; html += `<li class="day">${md(day)} · ${dayNo(day)}일차</li>`; }
+    html += evRow(e);
+  }
+  html += '</ul>';
+  if (!list.length) html += '<p class="empty">켜진 필터에 해당하는 기록이 없습니다. 지도 위 필터를 켜 보세요.</p>';
+  pbody.innerHTML = html;
+  feedEls = [...pbody.querySelectorAll('#feed .ev')]; feedT = feedEls.map(el => [EV[+el.dataset.ev].t]); feedIdx = -1;
+  updateFeed(true);
+}
+function updateFeed(force){
+  if (S.mode !== 'time') return;
+  const idx = countLE(feedT, S.T);
+  if (idx !== feedIdx || force){
+    feedEls.forEach((el, i) => { el.classList.toggle('future', i >= idx); el.classList.toggle('now', i === idx - 1); });
+    feedIdx = idx;
+    const cur = feedEls[idx - 1];
+    if (cur && (S.playing || force)) pbody.scrollTop = cur.offsetTop - pbody.clientHeight * .45;
+  }
+  const row = $('nowrow'); if (!row) return;
+  const html = P.map(p => {
+    if (!p.points.length || p.points[0][0] > S.T) return '';
+    const gone = !alive(p, S.T), cls = gone ? 'gone' : inSpan(p, S.T) ? '' : 'off';
+    return `<button class="who-chip ${cls}" data-p="${p.id}" aria-pressed="${isSel(p)}" title="${gone ? '사망' : cls ? '오프라인' : '접속 중'}" style="--c:${p.color}"><i></i>${esc(p.label)}</button>`;
+  }).join('');
+  if (row.dataset.html !== html){ row.dataset.html = html; row.innerHTML = html; }
+}
+function renderPanel(){ const top = pbody.scrollTop; S.mode === 'people' ? renderPeople() : renderFeed(); if (S.mode === 'people') pbody.scrollTop = top; }
+
+/* ---------- chrome ---------- */
+function renderLayers(){
+  const counts = {}; EV.forEach(e => { const g = kindOf(e.k).group; counts[g] = (counts[g] || 0) + (e.k === 'kill' ? (e.extra ? e.extra.count : 1) : 1); });
+  const html = GROUPS.filter(([g]) => counts[g]).map(([g, label]) =>
+    `<button class="chip" data-g="${g}" aria-pressed="${!!S.layers[g]}">${svg(GROUP_GLYPH[g])}${label}<span class="n">${counts[g]}</span></button>`).join('');
+  if ($('layers').dataset.html !== html){ $('layers').dataset.html = html; $('layers').innerHTML = html; }
+}
+function updateClock(){
+  const r = rowAt(S.T);
+  $('clock-g').textContent = r ? `${md(r[3])} ${r[4]}` : '—';
+  $('clock-r').textContent = r ? `${r[3].slice(0, 4)}년 · ${dayNo(r[3])}일차 · 실제 ${hm(S.T)}${S.follow && S.live ? ' (실시간)' : ''}` : '';
+  $('live').hidden = !S.live; $('live').classList.toggle('on', S.follow && S.live);
+  const btn = $('play');   // only touch the icon when the state flips, or a click in progress gets dropped
+  if (btn.dataset.playing === String(S.playing)) return;
+  btn.dataset.playing = S.playing;
+  btn.innerHTML = S.playing ? '<svg viewBox="0 0 16 16"><rect x="3" y="2" width="3.6" height="12" rx="1" fill="currentColor"/><rect x="9.4" y="2" width="3.6" height="12" rx="1" fill="currentColor"/></svg>'
+    : '<svg viewBox="0 0 16 16"><path d="M4 2l10 6-10 6z" fill="currentColor"/></svg>';
+  btn.setAttribute('aria-label', S.playing ? '일시 정지' : '재생');
+}
+function updateHeader(){
+  if (!rows.length){ $('sub').textContent = '아직 기록이 없습니다'; return; }
+  const ds = days();
+  $('sub').textContent = `${ds[0].date.slice(0, 4)}년 ${md(ds[0].date)}${ds.length > 1 ? ' – ' + md(ds[ds.length - 1].date) : ''} · 실제 ${hm(A())} – ${S.live ? '진행 중' : hm(B())} · 관측 ${rows.length.toLocaleString()}건`;
+}
+function setMode(m, fromHash, force){
+  if (S.mode === m && !force) return;
+  S.mode = m; stop();
+  $('tab-people').setAttribute('aria-selected', m === 'people'); $('tab-time').setAttribute('aria-selected', m === 'time');
+  $('speed').hidden = m !== 'time';
+  $('tl-note').textContent = m === 'time' ? '' : '막대를 누르면 그 인물을 선택합니다. 재생은 시간순 보기에서 할 수 있어요.';
+  if (m === 'people'){ S.T = B(); S.follow = true; } else if (S.T >= B() && !S.live) S.T = A();
+  if (!fromHash) try { history.replaceState(null, '', location.search + '#' + (document.documentElement.classList.contains('embedded') ? 'embed' : m)); } catch (e) {}
+  closePop(); renderPanel(); updateClock(); drawTimeline(); req();
+}
+function select(name){ if (S.sel.has(name)) S.sel.delete(name); else S.sel.add(name); afterSelect(S.sel.has(name) ? name : null); }
+function selectOnly(name){ S.sel = new Set(name ? [name] : []); afterSelect(name); }
+function afterSelect(added){
+  closePop(); renderPanel(); drawTimeline(); refreshStates(); req();
+  if (!added || S.mode !== 'people') return;
+  fitBounds(selBox(), 80);
+  const el = [...pbody.querySelectorAll('[data-player]')].find(b => b.dataset.player === added);
+  if (el) pbody.scrollTop = el.parentElement.offsetTop - 8;
+}
+function focusEvent(e, setT){
+  if (setT && S.mode === 'time'){ S.T = e.t; S.follow = false; stop(); onTime(); }
+  if (e.x == null) return;
+  setView(Math.max(view.s, 2.2), e.x, e.y); S.flash = { x: e.x, y: e.y, t0: performance.now() }; req();
+}
+function onTime(){ updateClock(); updateFeed(); drawTimeline(); refreshStates(); req(); }
+
+/* playback */
+let last = 0;
+function play(){ if (S.mode !== 'time') setMode('time'); if (S.T >= B() - 1000) S.T = A(); S.playing = true; S.follow = false; last = performance.now(); updateClock(); req(); }
+function stop(){ S.playing = false; updateClock(); }
+function tick(now){
+  frame = 0;
+  if (tween){
+    const k = clamp((now - tween.t0) / tween.dur, 0, 1), e = 1 - Math.pow(1 - k, 3);
+    const s = Math.exp(Math.log(tween.from.s) + (Math.log(tween.to.s) - Math.log(tween.from.s)) * e);
+    view.s = s; view.ox = tween.from.cx + (tween.to.cx - tween.from.cx) * e - W / 2 / s; view.oy = tween.from.cy + (tween.to.cy - tween.from.cy) * e - H / 2 / s; clampView();
+    if (k >= 1) tween = null;
+  }
+  if (S.playing){
+    S.T = Math.min(B(), S.T + (now - last) * S.speed); last = now;   // speed = game-recording ms per real ms (5분/초 = 300)
+    if (S.T >= B()){ stop(); S.follow = S.live; }
+    updateClock(); updateFeed(); drawTimeline(); refreshStates();
+  }
+  draw();
+  if (tween || S.playing || S.flash) req();
+}
+
+/* ---------- state at a moment (from what the recorder logged) ---------- */
+function stateAt(p, T){
+  const r = rowAt(T), pos = posAt(p, T), evs = p.evs.filter(e => e.t <= T);
+  const ks = p.killSeries.filter(k => k[0] <= T), kills = ks.length ? ks[ks.length - 1][1] - p.killSeries[0][1] : 0;
+  const ups = {}; evs.filter(e => e.k === 'levelup' && e.extra).forEach(e => ups[e.extra.perk] = e.extra.level);
+  const weapons = evs.filter(e => e.k === 'weapon').map(e => e.d);
+  const wounds = evs.filter(e => e.k === 'injury' || e.k === 'bitten').map(e => `${e.gt} ${describe(e)}`);
+  const profile = p.profiles.filter(x => x[0] <= T).pop();
+  const h = profile && profile[1];
+  const body = h ? { overall: h.health, items: (h.wounds || []).map(([part, kinds, wrapped]) => {
+    const ks = String(kinds).split(',');
+    return { text: `${PARTS[part] || part} · ${ks.map(k => WOUND_KO[k] || k).join(', ')}${wrapped ? ' (붕대)' : ''}`, severe: ks.some(k => SEVERE_WOUNDS.has(k)) };
+  }) } : null;
+  const status = !alive(p, T) ? 'dead' : !pos ? 'none' : inSpan(p, T) && (S.live || T < B() - 1000) ? 'online' : 'offline';   // a finished session's last moment is not "online"
+  return { r, pos, kills, ups, hand: weapons[weapons.length - 1], items: [...new Set(weapons)], wounds, status, car: pos && pos.v, profile, body };
+}
+function stateHtml(p, T){
+  const s = stateAt(p, T), chips = list => `<div class="chips">${list.map(x => `<span>${esc(x)}</span>`).join('')}</div>`;
+  const label = { online: '<span class="pill on">접속 중</span>', offline: '<span class="pill">오프라인</span>', dead: `<span class="pill dead">사망 · ${p.deathEv ? md(p.deathEv.gd) + ' ' + p.deathEv.gt : ''}</span>`, none: '<span class="pill">아직 관측 전</span>' }[s.status];
+  let html = `<div class="row">${label}<span class="note">${s.r ? md(s.r[3]) + ' ' + s.r[4] + ' · ' : ''}실제 ${hm(T)}</span></div>`;
+  html += `<div class="row"><span><span class="big">${s.kills}</span> <span class="note">처치 (세션 중)</span></span><span class="note">${s.car ? '차량 탑승 중' : '도보'}${s.pos ? ' · ' + esc(placeName(s.pos.x, s.pos.y)) : ''}</span></div>`;
+  if (s.profile){
+    const g = s.profile[1], hands = (g.hands || []).filter(Boolean);
+    html += `<div><h4>손</h4>${hands.length ? chips(hands) : '<span class="note">빈손</span>'}</div>`;
+    if ((g.worn || []).length) html += `<div><h4>착용</h4>${chips([...new Set(g.worn)])}</div>`;
+    const sk = Object.entries(g.skills || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${SKILLS[k] || k} ${v}`);
+    if (sk.length) html += `<div><h4>스킬</h4>${chips(sk)}</div>`;
+    html += `<div class="note">장비 기록 시각 실제 ${hm(s.profile[0])} (게임 10분마다, 바뀔 때만 기록)</div>`;
+  } else {
+    html += `<div><h4>손</h4>${s.hand ? chips([s.hand]) : '<span class="note">무기 기록 없음</span>'}</div>`;
+    const ups = Object.entries(s.ups).map(([k, v]) => `${SKILLS[k] || k} ${v}`);
+    if (ups.length) html += `<div><h4>오른 스킬</h4>${chips(ups)}</div>`;
+    html += `<div class="note">${p.profiles.length ? '이 시점까지 장비 기록이 없습니다.' : '장비 기록 없음 · 장비 기록 기능 이전의 세션이거나 클라이언트 모드가 옛 버전입니다.'}</div>`;
+  }
+  const b = s.body;
+  if (b) html += `<div><h4>몸 상태${b.overall != null ? ` <span class="note">체력 ${b.overall}</span>` : ''}</h4>` +
+    `<ul>${b.items.slice(0, 6).map(w => `<li>${esc(w.text)}</li>`).join('')}` +
+    `${b.items.length > 6 ? `<li class="note">외 ${b.items.length - 6}곳</li>` : ''}${!b.items.length ? '<li class="note">상처 없음</li>' : ''}</ul></div>`;
+  else html += `<div><h4>받은 상처 <span class="note">${s.wounds.length}곳 · 회복 여부는 기록되지 않습니다</span></h4>` +
+    `<ul>${s.wounds.slice(-6).map(w => `<li>${esc(w)}</li>`).join('')}${s.wounds.length > 6 ? `<li class="note">외 ${s.wounds.length - 6}곳</li>` : ''}${!s.wounds.length ? '<li class="note">기록된 상처 없음</li>' : ''}</ul></div>`;
+  if (s.items.length > 1) html += `<div><h4>확보한 주요 장비</h4>${chips(s.items)}</div>`;
+  const tr = [p.prof, ...p.traits].filter(Boolean);
+  if (tr.length) html += `<div><h4>직업 · 특성</h4>${chips(tr)}</div>`;
+  return html;
+}
+/* state windows: one per character, several at once, dragged by the header; they follow the clock */
+const wins = [];
+let zTop = 6;
+const front = el => el.style.zIndex = ++zTop;
+function openState(p, sx, sy){
+  let w = wins.find(x => x.p === p);
+  if (!w){
+    const el = document.createElement('div'); el.className = 'pop state'; el.dataset.win = p.id;
+    el.innerHTML = '<header></header><div class="st"></div>';
+    mapEl.append(el); w = { p, el }; wins.push(w);
+    renderWin(w); placeAt(el, sx, sy);
+    for (let k = 0; k < wins.length && wins.some(o => o !== w && Math.abs(o.el.offsetLeft - el.offsetLeft) < 14 && Math.abs(o.el.offsetTop - el.offsetTop) < 14); k++)
+      moveTo(el, el.offsetLeft + 26, el.offsetTop + 26);
+  }
+  front(w.el);
+}
+function renderWin(w){
+  const p = w.p, on = isSel(p), only = on && S.sel.size === 1;
+  const head = `<strong style="color:${p.color}">${esc(p.label)}${p.name ? ` <span style="color:var(--muted);font-weight:500">${esc(p.name)}</span>` : ''}</strong><span style="display:flex;gap:6px;align-items:center"><button class="mbtn" data-toggle style="padding:3px 10px" title="다른 선택은 그대로 두고 이 사람(모든 캐릭터)을 넣거나 뺍니다">${on ? '선택 해제' : '선택에 추가'}</button><button class="mbtn" data-only style="padding:3px 10px">${only ? '모두 보기' : '이 사람만'}</button><button class="x" data-close aria-label="닫기">×</button></span>`;
+  const body = stateHtml(p, S.T), h = w.el.firstElementChild, b = w.el.lastElementChild;
+  if (h.dataset.html !== head){ h.dataset.html = head; h.innerHTML = head; }
+  if (b.dataset.html !== body){ b.dataset.html = body; b.innerHTML = body; }
+}
+function refreshStates(){ wins.forEach(renderWin); }
+function closeWin(w){ w.el.remove(); wins.splice(wins.indexOf(w), 1); }
+mapEl.addEventListener('click', ev => {
+  const el = ev.target.closest('.pop.state'); if (!el) return;
+  const w = wins.find(x => x.el === el);
+  if (ev.target.closest('[data-close]')) return closeWin(w);
+  if (ev.target.closest('[data-toggle]')) return select(w.p.player);
+  if (ev.target.closest('[data-only]')) return selectOnly(isSel(w.p) && S.sel.size === 1 ? null : w.p.player);
+});
+function moveTo(el, x, y){
+  el.style.left = clamp(x, 0, Math.max(0, W - el.offsetWidth)) + 'px';
+  el.style.top = clamp(y, 0, Math.max(0, H - 40)) + 'px';
+}
+let moving = null;
+mapEl.addEventListener('pointerdown', ev => {
+  const el = ev.target.closest('.pop'); if (!el) return;
+  front(el);
+  if (!ev.target.closest('header') || ev.target.closest('button')) return;
+  moving = { el, dx: ev.clientX - el.offsetLeft, dy: ev.clientY - el.offsetTop, id: ev.pointerId };
+  el.setPointerCapture(ev.pointerId); el.classList.add('moving'); ev.preventDefault();
+});
+mapEl.addEventListener('pointermove', ev => { if (moving && ev.pointerId === moving.id) moveTo(moving.el, ev.clientX - moving.dx, ev.clientY - moving.dy); });
+const endMove = ev => { if (moving && ev.pointerId === moving.id){ moving.el.classList.remove('moving'); moving = null; } };
+mapEl.addEventListener('pointerup', endMove); mapEl.addEventListener('pointercancel', endMove);
+
+/* ---------- popover & tooltip ---------- */
+const pop = $('pop'), tip = $('tip');
+function placeAt(el, sx, sy){
+  const w = el.offsetWidth, h = el.offsetHeight;
+  let x = sx + 16; const y = sy - 20;
+  if (x + w > W - 10) x = sx - w - 16;
+  el.style.left = clamp(x, 10, Math.max(10, W - w - 10)) + 'px';
+  el.style.top = clamp(y, 10, Math.max(10, H - h - 10)) + 'px';
+}
+function closePop(){ pop.hidden = true; }
+function openPop(hit){
+  const evs = hit.items.slice().sort((a, b) => a.t - b.t);
+  const b = [Math.min(...evs.map(e => e.x)), Math.min(...evs.map(e => e.y)), Math.max(...evs.map(e => e.x)), Math.max(...evs.map(e => e.y))];
+  const spread = Math.max(b[2] - b[0], b[3] - b[1]);
+  const canZoom = evs.length > 1 && view.s < MAX_S * .95 && spread * MAX_S > 30;
+  const byKind = {}; evs.forEach(e => byKind[kindOf(e.k).label] = (byKind[kindOf(e.k).label] || 0) + 1);
+  pop.innerHTML = `<header><strong>${hit.sleep ? `숙박 ${evs.length}회` : evs.length > 1 ? `가까운 기록 ${evs.length}건` : esc(evs[0].p.label)}</strong><button class="x" data-close aria-label="닫기">×</button></header>
+    ${evs.length > 1 ? `<p class="sum">${Object.entries(byKind).map(([k, n]) => `${k} ${n}`).join(' · ')} · 반경 ${Math.round(spread)}타일</p>` : ''}
+    <ul>${evs.map(e => evRow(e, { withDay: true })).join('')}</ul>
+    ${evs.length > 1 ? `<div class="act"><button class="mbtn primary" data-zoom ${canZoom ? '' : 'disabled'}>확대해서 펼치기</button>${canZoom ? '' : '<span class="tl-note">같은 자리에 겹친 기록입니다</span>'}</div>` : ''}`;
+  pop.hidden = false; front(pop); placeAt(pop, hit.sx, hit.sy);
+  pop._bounds = b;
+}
+function openHeads(h){
+  pop.innerHTML = `<header><strong>이 근처 ${h.people.length}명</strong><button class="x" data-close aria-label="닫기">×</button></header><ul>${h.people.map(p =>
+    `<li class="ev"><button data-pick="${p.id}"><time></time><svg viewBox="0 0 14 14" style="color:${p.color}"><circle cx="7" cy="7" r="5.5" fill="currentColor"/></svg><span class="what"><span class="who">${esc(p.label)}</span>${S.mode === 'time' ? (inSpan(p, S.T) ? '접속 중' : '오프라인') : '마지막 관측 위치'}</span></button></li>`).join('')}</ul>`;
+  pop.hidden = false; front(pop); placeAt(pop, h.sx, h.sy);
+}
+function placeBeside(el, ref){   // keep the list of names visible: right of it, else left, else below
+  const w = el.offsetWidth, gap = 8, top = ref.offsetTop + (wins.length - 1) * 22;
+  if (ref.offsetLeft + ref.offsetWidth + gap + w <= W) return moveTo(el, ref.offsetLeft + ref.offsetWidth + gap, top);
+  if (ref.offsetLeft - gap - w >= 0) return moveTo(el, ref.offsetLeft - gap - w, top);
+  moveTo(el, ref.offsetLeft + (wins.length - 1) * 22, ref.offsetTop + ref.offsetHeight + gap);
+}
+pop.addEventListener('click', ev => {
+  if (ev.target.closest('[data-close]')) return closePop();
+  if (ev.target.closest('[data-zoom]')){ fitBounds(pop._bounds, 90); closePop(); return; }
+  const pick = ev.target.closest('[data-pick]');
+  if (pick){ const p = P[+pick.dataset.pick], fresh = !wins.some(w => w.p === p); openState(p, pop.offsetLeft, pop.offsetTop); if (fresh) placeBeside(wins.find(w => w.p === p).el, pop); return; }
+  const row = ev.target.closest('[data-ev]'); if (row) focusEvent(EV[+row.dataset.ev], true);
+});
+function showTip(hit, sx, sy){
+  if (!hit){ tip.hidden = true; return; }
+  if (hit.type === 'head'){
+    tip.innerHTML = hit.people.map(p => `<b>${esc(p.label)}</b> · ${S.mode === 'time' || S.live ? (inSpan(p, S.T) ? '접속 중' : '오프라인') : '마지막 관측 위치'}`).join('<br>') + '<br><span style="opacity:.7">눌러서 그 시점 상태 보기</span>';
+  } else if (hit.items.length === 1){
+    const e = hit.items[0];
+    tip.innerHTML = `<b>${esc(e.p.label)}</b> · ${esc(describe(e))}<br>${md(e.gd)} ${e.gt} <span style="opacity:.7">(실제 ${hm(e.t)})</span><br><span style="opacity:.7">${esc(placeName(e.x, e.y))} · ${e.x}, ${e.y}</span>`;
+  } else if (hit.sleep){
+    const ppl = [...new Set(hit.items.map(e => e.p.label))];
+    tip.innerHTML = `<b>숙박 ${hit.items.length}회</b> · ${esc(ppl.join(', '))}<br><span style="opacity:.7">눌러서 날짜 보기</span>`;
+  } else {
+    const ppl = [...new Set(hit.items.map(e => e.p.label))];
+    tip.innerHTML = `<b>기록 ${hit.items.length}건</b> · ${esc(ppl.join(', '))}<br><span style="opacity:.7">눌러서 펼치기</span>`;
+  }
+  tip.hidden = false; placeAt(tip, sx, sy);
+}
+function hitAt(sx, sy){
+  let best = null, bd = Infinity;
+  for (const h of hits){ const d = Math.hypot(h.sx - sx, h.sy - sy); if (d <= h.r && d < bd){ bd = d; best = h; } }
+  return best;
+}
+
+/* ---------- input: map ---------- */
+const ptrs = new Map(); let drag = null, pinch = null;
+canvas.addEventListener('pointerdown', ev => {
+  canvas.setPointerCapture(ev.pointerId); ptrs.set(ev.pointerId, { x: ev.offsetX, y: ev.offsetY });
+  if (ptrs.size === 2){ const [a, b] = [...ptrs.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) }; drag = null; }
+  else drag = { x: ev.offsetX, y: ev.offsetY, moved: false };
+});
+canvas.addEventListener('pointermove', ev => {
+  const sx = ev.offsetX, sy = ev.offsetY;
+  if (ptrs.has(ev.pointerId)) ptrs.set(ev.pointerId, { x: sx, y: sy });
+  if (pinch && ptrs.size === 2){ const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y); zoomAt(d / pinch.d, (a.x + b.x) / 2, (a.y + b.y) / 2); pinch.d = d; return; }
+  if (drag){
+    const dx = sx - drag.x, dy = sy - drag.y;
+    if (drag.moved || Math.hypot(dx, dy) > 4){
+      drag.moved = true; canvas.classList.add('dragging'); tip.hidden = true; closePop();
+      view.ox -= dx / view.s; view.oy -= dy / view.s; clampView(); tween = null; drag.x = sx; drag.y = sy; req();
+    }
+    return;
+  }
+  const [wx, wy] = toW(sx, sy), co = $('coords'), px = Math.round(wx), py = Math.round(wy);
+  co.hidden = false; co.textContent = `x ${px} · y ${py}`;
+  const s = document.createElement('span'); s.className = 'place'; s.textContent = placeName(px, py); co.append(s);
+  const h = hitAt(sx, sy); canvas.classList.toggle('pointing', !!h); showTip(h, sx, sy);
+});
+function endPtr(ev){
+  ptrs.delete(ev.pointerId);
+  if (ptrs.size < 2) pinch = null;
+  if (drag && !drag.moved && ev.type === 'pointerup'){
+    const h = hitAt(ev.offsetX, ev.offsetY);
+    if (!h) closePop();
+    else if (h.type === 'head'){ tip.hidden = true; if (h.people.length === 1) openState(h.people[0], h.sx, h.sy); else openHeads(h); }
+    else { tip.hidden = true; openPop(h); }
+  }
+  drag = null; canvas.classList.remove('dragging');
+}
+canvas.addEventListener('pointerup', endPtr); canvas.addEventListener('pointercancel', endPtr);
+canvas.addEventListener('pointerleave', () => { tip.hidden = true; $('coords').hidden = true; });
+canvas.addEventListener('dblclick', ev => {
+  const h = hitAt(ev.offsetX, ev.offsetY);
+  if (h && h.items && h.items.length > 1){ const e = h.items; fitBounds([Math.min(...e.map(q => q.x)), Math.min(...e.map(q => q.y)), Math.max(...e.map(q => q.x)), Math.max(...e.map(q => q.y))], 90); closePop(); }
+  else zoomAt(1.6, ev.offsetX, ev.offsetY);
+});
+canvas.addEventListener('wheel', ev => { ev.preventDefault(); closePop(); zoomAt(Math.exp(-ev.deltaY * .0016), ev.offsetX, ev.offsetY); }, { passive: false });
+$('zin').onclick = () => zoomAt(1.5, W / 2, H / 2);
+$('zout').onclick = () => zoomAt(1 / 1.5, W / 2, H / 2);
+$('zfit').onclick = () => fitBounds(S.sel.size ? selBox() : allBox(), S.sel.size ? 80 : 40);
+
+/* ---------- input: timeline, panel, chrome ---------- */
+let tlDrag = false;
+const laneAt = y => Math.floor((y - TL.top) / TL.lane);
+tlCanvas.addEventListener('pointerdown', ev => {
+  const lane = laneAt(ev.offsetY);
+  if (S.mode === 'people' || ev.offsetX < TL.L){ if (lane >= 0 && lane < PLAYERS.length) select(PLAYERS[lane]); return; }
+  tlDrag = true; tlCanvas.setPointerCapture(ev.pointerId); stop(); S.T = tt(ev.offsetX); S.follow = S.live && S.T >= B() - 3000; onTime();
+});
+tlCanvas.addEventListener('pointermove', ev => {
+  if (tlDrag){ S.T = tt(ev.offsetX); S.follow = S.live && S.T >= B() - 3000; onTime(); return; }
+  const lane = laneAt(ev.offsetY);
+  tlCanvas.style.cursor = (S.mode === 'people' || ev.offsetX < TL.L) ? (lane >= 0 && lane < PLAYERS.length ? 'pointer' : 'default') : 'ew-resize';
+});
+tlCanvas.addEventListener('pointerup', () => tlDrag = false);
+tlCanvas.addEventListener('pointercancel', () => tlDrag = false);
+pbody.addEventListener('click', ev => {
+  const player = ev.target.closest('[data-player]'); if (player){ select(player.dataset.player); return; }
+  const chip = ev.target.closest('[data-p]'); if (chip){ select(P[+chip.dataset.p].player); return; }
+  if (ev.target.closest('[data-clear]')){ selectOnly(null); return; }
+  const row = ev.target.closest('[data-ev]'); if (row) focusEvent(EV[+row.dataset.ev], true);
+});
+$('layers').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-g]'); if (!b) return;
+  S.layers[b.dataset.g] = !S.layers[b.dataset.g]; b.setAttribute('aria-pressed', S.layers[b.dataset.g]);
+  $('layers').dataset.html = '';
+  try { localStorage.setItem('pzmap-layers', JSON.stringify(S.layers)); } catch (e) {}
+  closePop(); renderPanel(); drawTimeline(); req();
+});
+$('tab-people').onclick = () => setMode('people');
+$('tab-time').onclick = () => setMode('time');
+$('play').onclick = () => S.playing ? stop() : play();
+$('live').onclick = () => { S.follow = true; stop(); S.T = B(); onTime(); };
+$('speed').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-v]'); if (!b) return; S.speed = +b.dataset.v;
+  $('speed').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+});
+document.addEventListener('keydown', ev => {
+  if (ev.target.closest('input,textarea')) return;
+  if (ev.key === 'Escape'){   // the event list first, then state windows from the front
+    if (!pop.hidden) closePop();
+    else if (wins.length) closeWin(wins.reduce((a, w) => (+w.el.style.zIndex || 0) > (+a.el.style.zIndex || 0) ? w : a));
+    return;
+  }
+  if (ev.key === ' ' && !ev.target.closest('button')){ ev.preventDefault(); S.playing ? stop() : play(); }
+  if ((ev.key === 'ArrowRight' || ev.key === 'ArrowLeft') && S.mode === 'time' && !ev.target.closest('button')){
+    ev.preventDefault(); stop();
+    const list = EV.filter(e => onLayer(e) && visiblePerson(e.p));
+    const e = ev.key === 'ArrowRight' ? list.find(q => q.t > S.T) : [...list].reverse().find(q => q.t < S.T);
+    if (e) focusEvent(e, true);
+  }
+});
+
+/* ---------- sizing, live loading, boot ---------- */
+function resize(){
+  DPR = window.devicePixelRatio || 1;
+  const r = mapEl.getBoundingClientRect(); W = r.width; H = r.height;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  MIN_S = Math.min(W / WORLD.w, H / WORLD.h);
+  if (W < 50) return;
+  if (!fitted && P.length){ fitted = true; fitBounds(allBox(), 40, false); }
+  clampView(); drawTimeline(); draw();
+  wins.forEach(w => moveTo(w.el, w.el.offsetLeft, w.el.offsetTop));
+}
+// GitHub Pages copy: read the published JSON on Supabase Storage (config.js sets PZ_DATA); on the PC, the local /api
+const STATIC = window.PZ_DATA || null;
+let chunkVers = [];
+const CHUNK = 200;
+async function fetchState(){
+  if (!STATIC) return fetch('/api/state', { cache: 'no-store' }).then(r => r.json());
+  const st = await fetch(STATIC + 'state.json?v=' + Date.now(), { cache: 'no-store' }).then(r => r.json());
+  if (Date.now() - (st.published || 0) > 120000) st.records.forEach(r => { if (r.state === 'live') r.state = 'open'; });   // host PC is off
+  return st;
+}
+function resetData(){
+  rows = []; P.length = 0; byWho.clear(); PLAYERS.length = 0; EV.length = 0; chunkVers = [];
+  for (const k of Object.keys(colorOf)) delete colorOf[k];
+}
+// rows arrive in chunks of CHUNK; a chunk is fetched again only when its version changed.
+// If rows already drawn changed (not just appended), start over with every chunk.
+async function fetchRows(rec){
+  if (!STATIC) return fetch('/api/track?id=' + encodeURIComponent(SID) + '&from=' + rows.length, { cache: 'no-store' }).then(r => r.json());
+  const vers = (rec && rec.track && rec.track.vers) || [], name = String(SID).replace('session:', '');
+  for (let attempt = 0; attempt < 2; attempt++){
+    const out = [];
+    let restart = false;
+    for (let k = 0; k < vers.length; k++){
+      if (chunkVers[k] === vers[k]) continue;
+      const part = await fetch(STATIC + 'tracks/' + name + '/' + k + '.json?v=' + vers[k], { cache: 'no-store' }).then(r => r.json());
+      const have = Math.max(0, Math.min(CHUNK, rows.length - k * CHUNK));
+      if (have && JSON.stringify(part.slice(0, have)) !== JSON.stringify(rows.slice(k * CHUNK, k * CHUNK + have))){ restart = true; break; }
+      out.push(...part.slice(have)); chunkVers[k] = vers[k];
+    }
+    if (!restart) return out;
+    resetData();
+  }
+  return [];
+}
+async function load(){
+  try {
+    const st = await fetchState();
+    const rec = (st.records || []).find(x => x.id === SID || x.name === SID);
+    S.live = !!rec && rec.state === 'live';
+    $('eyebrow').textContent = `PROJECT ZOMBOID · ${st.server || ''} · 세션 ${String(SID).replace('session:', '')}`;
+    const before = rows.length;
+    const data = await fetchRows(rec);
+    if (rows.length < before){ renderLayers(); renderPanel(); }   // started over after a rewrite
+    const fresh = Array.isArray(data) && data.length;
+    if (fresh){ const nEv = EV.length; ingest(data); renderLayers(); if (!fitted) resize(); if (EV.length !== nEv || S.mode === 'people') renderPanel(); }
+    if (S.follow && !S.playing) S.T = B();
+    updateHeader(); updateClock(); updateFeed(); drawTimeline(); refreshStates(); req();
+  } catch (e) {}
+  setTimeout(load, S.live && !document.hidden ? 3000 : 15000);
+}
+new ResizeObserver(() => resize()).observe(mapEl);
+new ResizeObserver(() => drawTimeline()).observe($('tlwrap'));
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readTokens(); drawTimeline(); req(); });
+readTokens();
+setMode(location.hash === '#time' ? 'time' : 'people', true, true);
+addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h === 'time' || h === 'people') setMode(h, true); });
+load();
+</script>
+</body>
+</html>
