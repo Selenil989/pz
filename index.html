@@ -77,8 +77,10 @@ async function staticApi(path){
   if (p === '/api/state'){
     const st = await staticGet('state.json');
     st.public = true;
-    // no heartbeat for 2 minutes = the host PC (and its recorder) is off: nothing is live any more
-    if (Date.now() - (st.published || 0) > 120000){ st.live = {status:'off', port:(st.live || {}).port}; st.watcher = false; st.records.forEach(r => { if (r.state === 'live') r.state = 'open'; }); }
+    // no heartbeat for 2 minutes = the host PC (and its recorder) is off
+    if (Date.now() - (st.published || 0) > 120000) st.live = {status:'off', port:(st.live || {}).port};
+    // real-time updates stop with the game server: then nothing on this page is live
+    if ((st.live || {}).status !== 'running'){ st.watcher = false; st.records.forEach(r => { if (r.state === 'live') r.state = 'open'; }); }
     return lastState = st;
   }
   if (p === '/api/record'){

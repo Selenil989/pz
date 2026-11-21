@@ -1073,7 +1073,8 @@ const CHUNK = 200;
 async function fetchState(){
   if (!STATIC) return fetch('/api/state', { cache: 'no-store' }).then(r => r.json());
   const st = await fetch(STATIC + 'state.json?v=' + Date.now(), { cache: 'no-store' }).then(r => r.json());
-  if (Date.now() - (st.published || 0) > 120000) st.records.forEach(r => { if (r.state === 'live') r.state = 'open'; });   // host PC is off
+  // host PC off (no heartbeat) or game server off: real-time updates have stopped, nothing is live
+  if (Date.now() - (st.published || 0) > 120000 || (st.live || {}).status !== 'running') st.records.forEach(r => { if (r.state === 'live') r.state = 'open'; });
   return st;
 }
 function resetData(){
