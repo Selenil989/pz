@@ -216,7 +216,7 @@ const COLORS = ['#1565C0', '#DC5F1A', '#8C37B4', '#CD2837', '#008796', '#2E7D32'
 const KINDS = {
   death: { label: '사망', group: 'death', pri: 9, g: 'death' }, sleep: { label: '숙박', group: 'sleep', pri: 7, g: 'sleep' }, bitten: { label: '물림', group: 'bite', pri: 8, g: 'bite' },
   newchar: { label: '새 캐릭터', group: 'conn', pri: 6, g: 'spawn' }, levelup: { label: '스킬 상승', group: 'skill', pri: 5, g: 'skill' },
-  kill_milestone: { label: '킬 달성', group: 'skill', pri: 5, g: 'skill' }, weapon: { label: '장비', group: 'item', pri: 4, g: 'item' },
+  kill_milestone: { label: '킬 달성', group: 'skill', pri: 5, g: 'skill' }, weapon: { label: '처음 확인한 장비', group: 'item', pri: 4, g: 'item' },
   injury: { label: '부상', group: 'injury', pri: 3, g: 'injury' }, vehicle_in: { label: '차량 탑승', group: 'car', pri: 2, g: 'car' },
   vehicle_out: { label: '차량 하차', group: 'car', pri: 2, g: 'car' }, enter: { label: '건물', group: 'enter', pri: 1, g: 'enter' },
   join: { label: '접속', group: 'conn', pri: 1, g: 'login' }, leave: { label: '접속 종료', group: 'conn', pri: 1, g: 'logout' },
@@ -346,11 +346,11 @@ function describe(e){
     case 'levelup': { const x = e.extra; return x ? `${SKILLS[x.perk] || x.perk} Lv ${x.level}` : e.d; }
     case 'bitten': return '물림' + (e.d ? ' · ' + e.d : '');
     case 'injury': return '부상 · ' + e.d;
-    case 'weapon': return '장비 · ' + e.d;
+    case 'weapon': return '장비 확인 · ' + e.d;
     case 'enter': return '건물 · ' + (ROOMS[e.d] || e.d);
     case 'kill': return `좀비 처치 · ${e.extra ? e.extra.count : (e.d.match(/\d+/) || [''])[0]}마리`;
     case 'newchar': { const x = e.extra; return '새 캐릭터' + (x ? ' · ' + [x.n, x.prof].filter(Boolean).join(' · ') : ''); }
-    case 'death': return '사망';
+    case 'death': return '사망' + (e.extra && e.extra.cause ? ' · ' + e.extra.cause : '');
     case 'sleep': return e.extra ? '숙박 · 잠으로 ' + fmtDur(e.extra.mins * 60e3) + ' 건너뜀' : '숙박';
     default: return kindOf(e.k).label + (e.d && !['join', 'leave', 'vehicle_in', 'vehicle_out'].includes(e.k) ? ' · ' + e.d : '');
   }
