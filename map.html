@@ -245,6 +245,7 @@ const SVG = {
   spawn: '<circle cx="7" cy="7" r="4.6" fill="none" stroke="currentColor" stroke-width="2.4"/>',
   kill: '<circle cx="7" cy="7" r="3.4" fill="currentColor"/>',
   sleep: '<path d="M7 1.2l6 5.4h-1.8V13H2.8V6.6H1z" fill="currentColor"/>',
+  path: '<path d="M1.5 11.5C4 4 7 10 12.5 2.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/>',
   enter: '<rect x="3" y="1.8" width="8" height="10.4" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="8.6" cy="7.4" r="1.1" fill="currentColor"/>',
 };
 const svg = (g, color) => `<svg viewBox="0 0 14 14" aria-hidden="true"${color ? ` style="color:${color}"` : ''}>${SVG[g] || SVG.kill}</svg>`;
@@ -283,7 +284,7 @@ function glyph(c, g, x, y, color, s = 6){
 let rows = [];
 const P = [], byWho = new Map(), PLAYERS = [], colorOf = {}, EV = [];
 const S = { mode: 'people', sel: new Set(), T: 0, playing: false, speed: 300, flash: null, live: false, follow: true,
-  layers: { death: true, sleep: true, skill: true, bite: true, injury: false, item: false, car: false, conn: false, kill: false, enter: false } };
+  layers: { path: true, death: true, sleep: true, skill: true, bite: true, injury: false, item: false, car: false, conn: false, kill: false, enter: false } };
 try { const saved = JSON.parse(localStorage.getItem('pzmap-layers') || 'null'); if (saved) Object.assign(S.layers, saved); } catch (e) {}
 const A = () => rows.length ? rows[0][8] : Date.now();
 const B = () => Math.max(rows.length ? rows[rows.length - 1][8] : Date.now(), S.live ? Date.now() : 0);
@@ -466,7 +467,7 @@ function draw(){
   const w = Math.max(2, Math.min(4, view.s * 2.2 + 2));
 
   // paths: everything in people mode; in time mode the path so far, faded, with the last 30 minutes bright
-  for (const p of order){
+  for (const p of S.layers.path ? order : []){
     const pos = posAt(p, T); if (!pos) continue;
     const dim = dimmed(p), tail = alive(p, T) ? pos : null;
     if (timeMode){
@@ -475,7 +476,7 @@ function draw(){
     } else strokeRun(p.points, 0, p.points.length - 1, null, p.color, dim ? .14 : (S.sel.size ? 1 : .85), isSel(p) ? w + 1.5 : w);
   }
   // start markers for the selected players' characters
-  for (const p of P.filter(isSel)){
+  for (const p of S.layers.path ? P.filter(isSel) : []){
     const a = p.points[0]; if (!a || a[0] > T) continue;
     const [x, y] = toS(a[1], a[2]);
     ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fillStyle = K.raised; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = p.color; ctx.stroke();
@@ -732,7 +733,7 @@ function renderPanel(){ const top = pbody.scrollTop; S.mode === 'people' ? rende
 /* ---------- chrome ---------- */
 function renderLayers(){
   const counts = {}; EV.forEach(e => { const g = kindOf(e.k).group; counts[g] = (counts[g] || 0) + (e.k === 'kill' ? (e.extra ? e.extra.count : 1) : 1); });
-  const html = GROUPS.filter(([g]) => counts[g]).map(([g, label]) =>
+  const html = `<button class="chip" data-g="path" aria-pressed="${!!S.layers.path}">${svg('path')}경로</button>` + GROUPS.filter(([g]) => counts[g]).map(([g, label]) =>
     `<button class="chip" data-g="${g}" aria-pressed="${!!S.layers[g]}">${svg(GROUP_GLYPH[g])}${label}<span class="n">${counts[g]}</span></button>`).join('');
   if ($('layers').dataset.html !== html){ $('layers').dataset.html = html; $('layers').innerHTML = html; }
 }
